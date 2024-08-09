@@ -39,6 +39,8 @@ class CBFQPLayer:
             self.num_cbfs = 2
         elif self.env.dynamics_mode == 'Quadrotor':
             self.num_cbfs = 1
+        elif self.env.dynamics_mode == 'VSA': # TODO: Check this later
+            self.num_cbfs = 1
 
         self.action_dim = env.action_space.shape[0]
         self.num_ineq_constraints = self.num_cbfs + 2 * self.action_dim

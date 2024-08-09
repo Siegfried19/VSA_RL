@@ -51,7 +51,7 @@ def train(agent, env, dynamics_model, args):
         # Init disturbance estimator if using L1
         if args.use_L1:
             # State of the dynamics
-            init_state = dynamics_model.get_state(states)
+            init_state = dynamics_model.get_state(obs)
             estimator = DisturbanceEstimator(init_state, env)
             sigma_hat = np.zeros(init_state.shape)
         
@@ -291,6 +291,8 @@ if __name__ == "__main__":
     parser.add_argument('--use_L1', type=bool, default=True, help='Use L1 estimator to estimate disturbance')
     
     args = parser.parse_args()
+    
+    args.diff_qp = False
     
     # Set output folder and resume path
     if args.mode == 'train':

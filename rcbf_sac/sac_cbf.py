@@ -6,7 +6,7 @@ from rcbf_sac.model import GaussianPolicy, QNetwork, DeterministicPolicy
 import numpy as np
 from rcbf_sac.diff_cbf_qp import CBFQPLayer
 from rcbf_sac.utils import to_tensor
-from rcbf_sac.compensator import Compensator
+# from rcbf_sac.compensator import Compensator
 from copy import deepcopy
 
 class RCBF_SAC(object):
@@ -51,11 +51,11 @@ class RCBF_SAC(object):
         self.cbf_layer = CBFQPLayer(env, args, args.gamma_b, args.k_d, args.l_p)
         self.diff_qp = args.diff_qp
 
-        # compensator
-        if args.use_comp:
-            self.compensator = Compensator(num_inputs, action_space.shape[0], action_space.low, action_space.high, args)
-        else:
-            self.compensator = None
+        # # compensator
+        # if args.use_comp:
+        #     self.compensator = Compensator(num_inputs, action_space.shape[0], action_space.low, action_space.high, args)
+        # else:
+        #     self.compensator = None
 
     def select_action(self, obs, dynamics_model, sigma_hat, evaluate=False, warmup=False):
         if self.env.dynamics_mode == 'Quadrotor':
@@ -89,14 +89,14 @@ class RCBF_SAC(object):
         safe_action, h_value = self.get_safe_action(state, action, dynamics_model, sigma_hat)
         if self.use_L1:
             return safe_action.detach().cpu().numpy()[0] if expand_dim else safe_action.detach().cpu().numpy(), h_value
-        if not self.compensator:
-            return safe_action.detach().cpu().numpy()[0] if expand_dim else safe_action.detach().cpu().numpy()
-        else:
-            action_cbf = safe_action - action
-            action_comp = action_comp.detach().cpu().numpy()[0] if expand_dim else action_comp.detach().cpu().numpy()
-            action_cbf = action_cbf.detach().cpu().numpy()[0] if expand_dim else action_cbf.detach().cpu().numpy()
-            safe_action = safe_action.detach().cpu().numpy()[0] if expand_dim else safe_action.detach().cpu().numpy()
-            action = action.detach().cpu().numpy()[0] if expand_dim else action.detach().cpu().numpy()
+        # if not self.compensator:
+        #     return safe_action.detach().cpu().numpy()[0] if expand_dim else safe_action.detach().cpu().numpy()
+        # else:
+        action_cbf = safe_action - action
+        action_comp = action_comp.detach().cpu().numpy()[0] if expand_dim else action_comp.detach().cpu().numpy()
+        action_cbf = action_cbf.detach().cpu().numpy()[0] if expand_dim else action_cbf.detach().cpu().numpy()
+        safe_action = safe_action.detach().cpu().numpy()[0] if expand_dim else safe_action.detach().cpu().numpy()
+        action = action.detach().cpu().numpy()[0] if expand_dim else action.detach().cpu().numpy()
         # return action, action_comp, action_cbf
         return safe_action, action_comp, action_cbf, h_value
 
@@ -186,10 +186,10 @@ class RCBF_SAC(object):
 
         return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), alpha_loss.item(), alpha_tlogs.item()
 
-    def update_parameters_compensator(self, comp_rollouts):
+    # def update_parameters_compensator(self, comp_rollouts):
 
-        if self.compensator:
-            self.compensator.train(comp_rollouts)
+    #     if self.compensator:
+    #         self.compensator.train(comp_rollouts)
 
 
     # Save model parameters
@@ -203,8 +203,8 @@ class RCBF_SAC(object):
             self.critic.state_dict(),
             '{}/critic.pkl'.format(output)
         )
-        if self.compensator:
-            self.compensator.save_model(output)
+        # if self.compensator:
+        #     self.compensator.save_model(output)
 
     # Load model parameters
     def load_weights(self, output):
@@ -223,8 +223,8 @@ class RCBF_SAC(object):
         self.critic.load_state_dict(
             torch.load('{}/critic.pkl'.format(output), map_location=torch.device('cuda:0'))
         )
-        if self.compensator:
-            self.compensator.load_weights(output)
+        # if self.compensator:
+        #     self.compensator.load_weights(output)
 
     def load_model(self, actor_path, critic_path):
         if actor_path is not None:

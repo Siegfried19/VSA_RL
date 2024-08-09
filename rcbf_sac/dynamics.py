@@ -20,7 +20,8 @@ A few things to note:
 
 DYNAMICS_MODE = {'Unicycle': {'n_s': 3, 'n_u': 2},   # state = [x y θ]
                  'Quadrotor': {'n_s': 6, 'n_u': 1}, # state = [x z θ dx dz dθ]
-                 'SimulatedCars': {'n_s': 10, 'n_u': 2}}  # state = [x z θ vx vz ω]
+                 'SimulatedCars': {'n_s': 10, 'n_u': 2},  # state = [x z θ vx vz ω]
+                 'VSA': {'n_s': 6, 'n_u': 2}}  # state = [q,θp,θs,dq,dθp,dθs]
 MAX_STD = {'Unicycle': [2e-1, 2e-1, 2e-1], 'SimulatedCars': [0, 0.2, 0, 0.2, 0, 0.2, 0, 0.2, 0, 0.2], 'Quadrotor': [0.2, 0.2, 0.2, 0.2, 0.2, 0.2]}
 
 
@@ -242,6 +243,8 @@ class DynamicsModel:
             state_batch[:, 1::2] *= 30.0  # Scale Velocities
         elif self.env.dynamics_mode == 'Quadrotor':
             state_batch = np.copy(obs)
+        elif self.env.dynamics_mode == 'VSA':
+            state_batch = np.copy(obs[:, :6])
         else:
             raise Exception('Unknown dynamics')
 
