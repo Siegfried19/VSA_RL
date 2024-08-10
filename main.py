@@ -281,11 +281,6 @@ if __name__ == "__main__":
     parser.add_argument('--real_ratio', default=0.3, type=float, help='Portion of data obtained from real replay buffer for training.')
     parser.add_argument('--k_horizon', default=1, type=int, help='horizon of model-based rollouts')
     parser.add_argument('--rollout_batch_size', default=5, type=int, help='Size of initial state batch to rollout from.')
-    # Compensator --- Not used for comparison, can be removed
-    parser.add_argument('--comp_rate', default=0.005, type=float, help='Compensator learning rate')
-    parser.add_argument('--comp_train_episodes', default=200, type=int, help='Number of initial episodes to train compensator for.')
-    parser.add_argument('--comp_update_episode', default=50, type=int, help='Modulo for compensator updates')
-    parser.add_argument('--use_comp', type=bool, default=False, help='Should the compensator be used.')
     # L1 estimator
     # For current project TODO: Change back to default when finished
     parser.add_argument('--use_L1', type=bool, default=True, help='Use L1 estimator to estimate disturbance')

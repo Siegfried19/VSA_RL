@@ -170,12 +170,11 @@ class UnicycleEnv(gym.Env):
         
         # Re-initialize last goal dist
         self.last_goal_dist = self._goal_dist()
-        
         if self.render_flag:
             self.render_start()
 
         # TODO: Randomize this
-        return self.get_obs(), self.get_obs()
+        return self.state, self.get_obs()
 
     def get_obs(self):
         """Given the state, this function returns it to an observation akin to the one obtained by calling env.step

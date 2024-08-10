@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 # import torch
 # from scipy.linalg import expm
         
-
+# The parameter of the disturbance observer should be in the environment class
 class DisturbanceEstimator():
     def __init__(self, init_state, env, interval=None):
         self.t_batch = 0.0
