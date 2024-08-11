@@ -46,14 +46,15 @@ class VSAEnv(gym.Env):
         self.max_episode_steps = 5000
         
         # Disturbance estimator parameters
+        self.Ae = 1.0
         self.L1_theta_q = 0.05
         self.L1_theta_p = 0.09
         self.L1_theta_s = 0.12
         
         # variables for plotting
-        self.overall_disturbance = []
-        self.wind_disturbance = []
-        self.friction_disturbance = []
+        self.dwq_record = []
+        self.dwp_record = []
+        self.dws_record = []
         
         # State and action spaces
         action_space = np.array([50, 10])
@@ -84,7 +85,13 @@ class VSAEnv(gym.Env):
         return q_ref, k_ref
         
     def step(self, action):
-        pass
+        self.dwq = 0.0
+        self.dwp = 0.0
+        self.dws = 0.0
+        
+        
+        
+        
         
     def get_reward(self):
         pass

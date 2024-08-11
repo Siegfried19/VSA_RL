@@ -61,10 +61,9 @@ def train(agent, env, dynamics_model, args):
             if episode_steps % 500 == 0:
                 prYellow('Episode {} - step {} - eps_rew {} - eps_cost {}'.format(i_episode, episode_steps, episode_reward, episode_cost))
             
-            # state and next_state are for GP
             # states and next_states are for real dynamics states
             # TODO: Modify this dynamics_model to be more clean
-            state = dynamics_model.get_state(states)
+            state = dynamics_model.get_state(obs)
             
             # Generate Model rollouts
             if args.model_based and episode_steps % 5 == 0 and len(memory) > dynamics_model.max_history_count / 3:
@@ -104,6 +103,7 @@ def train(agent, env, dynamics_model, args):
                 action = agent.select_action(obs, dynamics_model, sigma_hat,warmup=args.start_steps > total_numsteps)  # Sample action from policy
             # Recoding disturbance estimation
             # if args.use_L1 and i_episode > args.max_episodes - 2:
+            # 这里区分了用GP还有用L1的，到时候可以把两个都试试
             if args.use_L1:
                 sigma_hat = estimator.disturbance_estimator(state, action)
                 if args.env_name == 'Unicycle':
@@ -129,6 +129,7 @@ def train(agent, env, dynamics_model, args):
             episode_reward += reward
             episode_cost += info.get('cost', 0)
 
+            # 我们能得到的是state，因为step迭代用的直接是假设真实的dynamics
             if env.dynamics_mode != 'Quadrotor':
                 next_obs = next_states
             elif episode_steps >= env.max_episode_steps:

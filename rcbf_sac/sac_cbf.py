@@ -63,6 +63,8 @@ class RCBF_SAC(object):
         if self.env.dynamics_mode == 'Unicycle':
             theta = np.arctan2(obs[3], obs[2])
             state = np.array([obs[0], obs[1], theta])    
+        if self.env.dynamics_mode == 'VSA':
+            state = obs[:6]
         
         obs = to_tensor(obs, torch.FloatTensor, self.device)
         state = to_tensor(state, torch.FloatTensor, self.device)

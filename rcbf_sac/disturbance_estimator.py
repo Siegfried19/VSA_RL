@@ -23,7 +23,7 @@ class DisturbanceEstimator():
         if self.interval is not None:
             self.dt = self.dt_int/self.interval
         
-        self.Ae = 1.0
+        self.Ae = self.env.Ae
         self.Mat_expm = np.exp(self.Ae*self.dt)
         self.Phi = (self.Mat_expm - 1.0) / self.Ae
         # Modified, not sure if this is correct TODO: check this
@@ -50,7 +50,7 @@ class DisturbanceEstimator():
             for i in range(self.interval):
                 state_hat = self.state_predictor(state, action)
         return sigma_hat
-
+    
 
 
 if __name__ == "__main__":
