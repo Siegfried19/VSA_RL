@@ -51,6 +51,7 @@ def train(agent, env, dynamics_model, args):
         # Init disturbance estimator if using L1
         if args.use_L1:
             # State of the dynamics
+            # TODO: Change the state back to envirnment
             init_state = dynamics_model.get_state(obs)
             estimator = DisturbanceEstimator(init_state, env)
             sigma_hat = np.zeros(init_state.shape)
@@ -62,7 +63,7 @@ def train(agent, env, dynamics_model, args):
                 prYellow('Episode {} - step {} - eps_rew {} - eps_cost {}'.format(i_episode, episode_steps, episode_reward, episode_cost))
             
             # states and next_states are for real dynamics states
-            # TODO: Modify this dynamics_model to be more clean
+            # TODO: Change the state back to envirnment
             state = dynamics_model.get_state(obs)
             
             # Generate Model rollouts
@@ -96,7 +97,6 @@ def train(agent, env, dynamics_model, args):
                                                                                                            dynamics_model)
                     updates += 1
 
-            # TODO: Figure out why use obs
             if args.use_L1:
                 action, h_value = agent.select_action(obs, dynamics_model, sigma_hat, warmup=args.start_steps > total_numsteps)
             else:
@@ -313,7 +313,7 @@ if __name__ == "__main__":
     
     # Random Seed
     if args.seed > 0:
-        # env.seed(args.seed)
+        env.seed(args.seed)
         env.action_space.seed(args.seed)
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)

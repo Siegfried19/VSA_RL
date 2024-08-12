@@ -335,6 +335,7 @@ class QuadrotorEnv(gym.Env):
         T2 = (F * self.d + M) / (2 * self.d)
         u = np.array([T1, T2])
         return u, phi_c, phi_c_dot
+    
 
 if __name__ == "__main__":
 

@@ -14,7 +14,7 @@ class DisturbanceEstimator():
         self.sigma_hat = np.zeros(self.state_hat.shape)     # disturbance estimate
 
         # use dynamics function directly to make DOB component more portable
-        self.get_f, self.get_g = env._get_dynamics()
+        self.get_f, self.get_g = env.get_dynamics()
 
         # DOB parameters
         self.dt_int = self.env.dt/1.0  # dt for dynamics integration
@@ -25,10 +25,9 @@ class DisturbanceEstimator():
         
         self.Ae = self.env.Ae
         self.Mat_expm = np.exp(self.Ae*self.dt)
-        self.Phi = (self.Mat_expm - 1.0) / self.Ae
+        self.Phi = (self.Mat_expm - 1.0)
         # Modified, not sure if this is correct TODO: check this
         self.adapt_gain_no_Bm = -self.Ae/self.Phi
-        # self.adapt_gain_no_Bm = -self.Mat_expm/self.Phi
 
     def state_predictor(self, state, action):
         self.state_hat = self.dt * (self.get_f(state) + self.sigma_hat + self.Ae*self.state_tilde + self.get_g(state) @ action) + self.state_hat
