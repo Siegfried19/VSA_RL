@@ -91,16 +91,7 @@ class RCBF_SAC(object):
         safe_action, h_value = self.get_safe_action(state, action, dynamics_model, sigma_hat)
         if self.use_L1:
             return safe_action.detach().cpu().numpy()[0] if expand_dim else safe_action.detach().cpu().numpy(), h_value
-        if not self.compensator:
-            return safe_action.detach().cpu().numpy()[0] if expand_dim else safe_action.detach().cpu().numpy()
-        # else:
-        # action_cbf = safe_action - action
-        # action_comp = action_comp.detach().cpu().numpy()[0] if expand_dim else action_comp.detach().cpu().numpy()
-        # action_cbf = action_cbf.detach().cpu().numpy()[0] if expand_dim else action_cbf.detach().cpu().numpy()
-        # safe_action = safe_action.detach().cpu().numpy()[0] if expand_dim else safe_action.detach().cpu().numpy()
-        # action = action.detach().cpu().numpy()[0] if expand_dim else action.detach().cpu().numpy()
-        # # return action, action_comp, action_cbf
-        # return safe_action, action_comp, action_cbf, h_value
+        return safe_action.detach().cpu().numpy()[0] if expand_dim else safe_action.detach().cpu().numpy()
 
     def update_parameters(self, memory, batch_size, updates, dynamics_model, memory_model=None, real_ratio=None):
         """
