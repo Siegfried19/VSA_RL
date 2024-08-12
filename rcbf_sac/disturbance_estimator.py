@@ -48,6 +48,7 @@ class DisturbanceEstimator():
             disturbance_hat = self.adaptive_law(state)
             for i in range(self.interval):
                 state_hat = self.state_predictor(state, action)
+        disturbance_hat = np.where(np.isnan(disturbance_hat), 0, disturbance_hat)
         return disturbance_hat
     
 

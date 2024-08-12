@@ -3,7 +3,8 @@ import gym
 from gym import spaces
 from scipy.linalg import expm
 import torch
-import utils
+from utils import *
+
 
 class VSAEnv(gym.Env):
     """Custom Environment that follows SafetyGym interface"""
@@ -49,8 +50,8 @@ class VSAEnv(gym.Env):
         self.max_episode_steps = 5000
         
         # Disturbance estimator parameters, fro dynamics of q, theta_p, theta_s
-        self.Ae = [0,0,0,1,1,1]
-        self.L1_delta = [0,0,0,0.09, 0.09, 0.12]
+        self.Ae = np.array([0,0,0,1,1,1])
+        self.L1_delta = np.array([0,0,0,0.09, 0.09, 0.12])
         
         # variables for plotting
         self.dwq_record = []
@@ -58,8 +59,8 @@ class VSAEnv(gym.Env):
         self.dws_record = []
         
         # State and action spaces
-        action_space = np.array([50, 10])
-        safe_action_space = np.array([40, 8])
+        action_space = np.array([15, 6])
+        safe_action_space = np.array([12, 4])
         
         self.action_space = spaces.Box(low=-action_space, high=action_space, shape=(2,))
         self.safe_action_space = spaces.Box(low=-safe_action_space, high=safe_action_space, shape=(2,))
@@ -178,41 +179,51 @@ class VSAEnv(gym.Env):
 
     def get_dynamics(self):
         def get_f(state):
-            state, expand_dim = utils.expand_dim(state)
+            state, expand = expand_dim(state)
             tau_e, tau_r, k = self.get_intermediate(state)
-            f_x = np.zeros(state.shape)
+            if isinstance(state, torch.Tensor):
+                f_x = torch.zeros(state.shape)
+            else:
+                f_x = np.zeros(state.shape)
             f_x[:,0] = state[:,3]
             f_x[:,1] = state[:,4]
             f_x[:,2] = state[:,5]
-            f_x[:,3] = 1/self.M * (-self.Dq*state[:,3] - self.m*self.g*self.d*np.sin(state[0]) - tau_e)
+            f_x[:,3] = 1/self.M * (-self.Dq*state[:,3] - self.m*self.g*self.d*np.sin(state[:,0])) - 1/self.M * tau_e
             f_x[:,4] = 1/self.Jp * (-self.Dp*state[:,4] + tau_e)
             f_x[:,5] = 1/self.Js * (-self.Ds*state[:,5] - tau_r)
-            f_x = utils.narrow_dim(f_x, expand_dim)
+            f_x = narrow_dim(f_x, expand)
             return f_x
         
         def get_g(state):
-            state, expand_dim = utils.expand_dim(state)
-            g_x = np.zeros((state.shape[1], 2))
+            state, expand = expand_dim(state)
+            if isinstance(state, torch.Tensor):
+                g_x = torch.zeros((state.shape[0], state.shape[1], 2))
+            else:
+                g_x = np.zeros((state.shape[0], state.shape[1], 2))
             g_x[:,4,0] = 1/self.Jp
             g_x[:,5,1] = 1/self.Js
-            g_x = utils.narrow_dim(g_x, expand_dim)
+            g_x = narrow_dim(g_x, expand)
             return g_x
+        return get_f, get_g
     
     def get_intermediate(self, state):
-        state, expand_dim = utils.expand_dim(state)
+        state, expand = expand_dim(state)
+        phi = state[:,0] - state[:,1]
+        tau_e = (2*self.ks * (self.n * state[:,2])**2 * self.la**2 * phi) / (self.la - self.n * state[:,2])**2
+        tau_r = 2*self.ks * self.n**2 * state[:,2] * self.la**3 * phi**2 / (self.la - self.n * state[:,2])**3
+        k = 2*self.ks * (self.n * state[:,2])**2 * self.la**2 / (self.la - self.n * state[:,2])**2
         
-        phi = state[0] - state[1]
-        tau_e = (2*self.ks * (self.n*self.state[2])**2 * self.la**2 * phi) / (self.la - self.n * self.state[2])**2
-        tau_r = 2*self.ks * self.n**2 * self.state[2] * self.la**3 * phi**2 / (self.la - self.n * self.state[2])**3
-        k = 2*self.ks * (self.n * self.state[2])**2 * self.la**2 / (self.la - self.n * self.state[2])**2
-        
-        tau_e = utils.narrow_dim(tau_e, expand_dim)
-        tau_r = utils.narrow_dim(tau_r, expand_dim)
-        k = utils.narrow_dim(k, expand_dim)
+        tau_e = narrow_dim(tau_e, expand)
+        tau_r = narrow_dim(tau_r, expand)
+        k = narrow_dim(k, expand)
         return tau_e, tau_r, k
     
-    def get_state(obs):
-        return obs[:6]
+    def get_obs(self, state, episode_step):
+        obs = np.zeros((8,))
+        obs[:6] = state
+        obs[6] = self.q_ref_traj[episode_step]
+        obs[7] = self.k_ref_traj[episode_step]
+        return obs
     
 if __name__ == "__main__":
 

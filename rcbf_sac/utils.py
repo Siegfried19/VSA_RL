@@ -58,8 +58,10 @@ def to_numpy(x):
     return x.cpu().detach().double().numpy()
 
 def to_tensor(x, dtype, device, requires_grad=False):
-    # convert numpy array to torch tensor
-    return torch.from_numpy(x).type(dtype).to(device).requires_grad_(requires_grad)
+    # convert numpy array to torch tensor if needed
+    if not isinstance(x, torch.Tensor):
+        return torch.from_numpy(x).type(dtype).to(device).requires_grad_(requires_grad)
+    return x.type(dtype).to(device).requires_grad_(requires_grad)
 
 def scale_action(action, action_lb, action_ub, device=None):
 

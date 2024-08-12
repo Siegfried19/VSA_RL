@@ -441,33 +441,33 @@ class CBFQPLayer:
         elif self.env.dynamics_mode == 'VSA':
             
             # In cbf functions, we assume alpha1(x) = x^2, alpha2(x) = x^2
-            L1_delta = torch.unsqueeze(np.stack(env.L1_delta, axis = 0), -1)
+            L1_delta = torch.unsqueeze(to_tensor(np.stack(self.env.L1_delta, axis = 0), torch.FloatTensor, self.device), -1)
             num_cbfs = self.num_cbfs
             n_u = action_batch.shape[1]
             state = state_batch[:, :, 0]
             num_constraints = self.num_cbfs + 2 * n_u
             
             # Constraints init
-            G = torch.zeros((batch_size, num_constraints, n_u + 1)).to(self.device)  # the extra variable is for epsilon (to make sure qp is always feasible)
+            G = torch.zeros((batch_size, num_constraints, n_u + 1 - 1)).to(self.device)  # the extra variable is for epsilon (to make sure qp is always feasible)
             h = torch.zeros((batch_size, num_constraints)).to(self.device)
             ineq_constraint_counter = 0
             
             # Ser up the CBFs
-            h_cbf = 0.5 * (state[:,0] - state[:,1])**2 - env.def_max**2
+            h_cbf = 0.5 * (state[:,0] - state[:,1])**2 - self.env.def_max**2
             if h_cbf < 0:
                 h_value = 1
                 
-            f_x = env.get_f(state)
-            g_x = env.get_g(state)
-            p_x = mean_pred_batch
+            f_x = self.env.get_f(state)
+            g_x = self.env.get_g(state)
+            d_x = mean_pred_batch
             
-            dhdx = np.zeros((batch_size, state.shape[-1]))
+            dhdx = torch.zeros((batch_size, state.shape[-1]))
             dhdx[:, 0] = state[:, 0] - state[:, 1]
             dhdx[:, 1] = state[:, 1] - state[:, 0]
             
             Lfh = torch.bmm(dhdx.view(batch_size, 1, -1), f_x.view(batch_size, -1, 1)).squeeze()
               
-            dLfhdx = np.zeros((batch_size, state.shape[-1]))
+            dLfhdx = torch.zeros((batch_size, state.shape[-1]))
             dLfhdx[:, 0] = state[:, 3] - state[:, 4]
             dLfhdx[:, 1] = state[:, 4] - state[:, 3]
             dLfhdx[:, 3] = state[:, 0] - state[:, 1]
@@ -475,22 +475,21 @@ class CBFQPLayer:
             
             L2fh = torch.bmm(dLfhdx.view(batch_size, 1, -1), f_x.view(batch_size, -1, 1)).squeeze()
             LfLgh = torch.bmm(dLfhdx.view(batch_size, 1, -1), g_x.view(batch_size, -1, 2)).squeeze()
-            LfLph = torch.bmm(dLfhdx.view(batch_size, 1, -1), p_x.view(batch_size, -1, 1)).squeeze()
+            LfLph = torch.bmm(dLfhdx.view(batch_size, 1, -1), d_x.view(batch_size, -1, 1)).squeeze()
             
-            alpha2_phi1 = Lfh**2 + 2*L2fh*h_cbf**2 + h_cbf**4
-            Lfalpha_1_h = 2*h_cbf*Lfh
+            alpha2_phi1 = self.gamma_b * (Lfh**2 + self.gamma_b * 2*Lfh*h_cbf**2 + self.gamma_b * h_cbf**4)
+            Lfalpha_1_h = self.gamma_b * 2*h_cbf*Lfh
 
             if self.use_L1:
-                Lfbd_bound = torch.bmm(torch.abs(dhdx.view(batch_size, 1, -1)), L1_delta.view(batch_size, -1, 1)).squeeze()
+                Lfbd_bound = torch.bmm(torch.abs(dLfhdx.view(batch_size, 1, -1)), L1_delta.view(batch_size, -1, 1)).squeeze()
             
             h[:, :self.num_cbfs] = alpha2_phi1 + Lfalpha_1_h  + L2fh + LfLph
             G[:, :self.num_cbfs, 0] = -LfLgh[0]
-            G[:, :self.num_cbfs, 1] = -LfLgh[1]
-            G[:, :self.num_cbfs, n_u] = -2  # for slack
+            G[:, :self.num_cbfs, 1] = -2  # for slack
             
             ineq_constraint_counter += self.num_cbfs
-            P = torch.diag(torch.tensor([0.05, 0.001, 1e1])).repeat(batch_size, 1, 1).to(self.device)
-            q = torch.zeros((batch_size, n_u + 1)).to(self.device)
+            P = torch.diag(torch.tensor([0.05, 1e1])).repeat(batch_size, 1, 1).to(self.device)
+            q = torch.zeros((batch_size, 2)).to(self.device)
     
         else:
             raise Exception('Dynamics mode unknown!')

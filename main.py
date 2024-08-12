@@ -103,7 +103,6 @@ def train(agent, env, dynamics_model, args):
                 action = agent.select_action(obs, dynamics_model, disturbance_hat, warmup=args.start_steps > total_numsteps)  # Sample action from policy
             # Recoding disturbance estimation
             # if args.use_L1 and i_episode > args.max_episodes - 2:
-            # 这里区分了用GP还有用L1的，到时候可以把两个都试试
             if args.use_L1:
                 disturbance_hat = estimator.disturbance_estimator(state, action)
                 if args.env_name == 'Unicycle':
@@ -120,7 +119,7 @@ def train(agent, env, dynamics_model, args):
             
             # Step
             # What we can get from the dynamics is the state
-            next_states, reward, done, info = env.step(action)  
+            next_state, reward, done, info = env.step(action)  
             next_obs = np.zeros((12,))
 
             if 'cost_exception' in info:
@@ -133,14 +132,13 @@ def train(agent, env, dynamics_model, args):
 
             # We need the observation, because we will need this to pick action
             if env.dynamics_mode == 'Quadrotor':
-                next_obs = env.get_obs(next_states, episode_steps)
+                next_obs = env.get_obs(next_state, episode_steps)
             elif env.dynamics_mode == 'VSA':
-                next_obs = env.get_obs(next_states, episode_steps)       
+                next_obs = env.get_obs(next_state, episode_steps)       
             elif episode_steps >= env.max_episode_steps:
-                next_obs = env.get_obs(next_states, episode_steps-1)
+                next_obs = env.get_obs(next_state, episode_steps-1)
             else:
-                next_obs = next_states
-            next_obs = next_states
+                next_obs = next_state
 
             # Ignore the "done" signal if it comes from hitting the time horizon.
             # (https://github.com/openai/spinningup/blob/master/spinup/algos/sac/sac.py)
@@ -152,12 +150,12 @@ def train(agent, env, dynamics_model, args):
             # Update state and store transition for GP model learning
             # if args.use_L1 == False:
             
-            # next_state = dynamics_model.get_state(next_states)
-            if episode_steps % 2 == 0 and i_episode < args.gp_max_episodes:  # Stop learning the dynamics after a while to stabilize learning
-                # TODO: Clean up line below, specifically (t_batch)
-                dynamics_model.append_transition(state, action, next_state, t_batch=np.array([episode_steps*env.dt]))
+            # # next_state = dynamics_model.get_state(next_states)
+            # if episode_steps % 2 == 0 and i_episode < args.gp_max_episodes:  # Stop learning the dynamics after a while to stabilize learning
+            #     # TODO: Clean up line below, specifically (t_batch)
+            #     dynamics_model.append_transition(state, action, next_state, t_batch=np.array([episode_steps*env.dt]))
 
-            states = next_states
+            # state = next_state becaue we get state from obs
             obs = next_obs
         end = time.time()
         
@@ -218,10 +216,7 @@ def test(agent, env, dynamics_model, evaluate, model_path, visualize=True, debug
     dynamics_model.load_disturbance_models(model_path)
 
     def policy(observation):
-        if args.use_comp:
-            action, action_comp, action_cbf = agent.select_action(observation, dynamics_model, disturbance_hat=None, evaluate=True)
-        else:
-            action = agent.select_action(observation, dynamics_model,evaluate=True)
+        action = agent.select_action(observation, dynamics_model,evaluate=True)
         return action
 
     evaluate(env, policy, dynamics_model=dynamics_model, debug=debug, visualize=visualize, save=False)
@@ -290,11 +285,20 @@ if __name__ == "__main__":
     parser.add_argument('--rollout_batch_size', default=5, type=int, help='Size of initial state batch to rollout from.')
     # L1 estimator
     # For current project TODO: Change back to default when finished
-    parser.add_argument('--use_L1', type=bool, default=True, help='Use L1 estimator to estimate disturbance')
+    parser.add_argument('--use_L1', type=bool, default=False, help='Use L1 estimator to estimate disturbance')
     
     args = parser.parse_args()
     
+    # For debugging
     args.diff_qp = False
+    args.env_name = 'VSA'
+    args.gamma_b = 20
+    args.max_episodes = 5000
+    args.cude = True
+    args.updates_per_step = 1
+    args.batch_size = 10
+    args.seed = 12345
+    args.use_L1 = True
     
     # Set output folder and resume path
     if args.mode == 'train':
