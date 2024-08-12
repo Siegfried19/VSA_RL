@@ -436,6 +436,53 @@ class CBFQPLayer:
             P = torch.diag(torch.tensor([0.001, 0.001, 1e1])).repeat(batch_size, 1, 1).to(self.device)
             q = torch.zeros((batch_size, n_u + 1)).to(self.device)
 
+        elif self.env.dynamics_mode == 'VSA':
+            
+            # In cbf functions, we assume alpha1(x) = x^2, alpha2(x) = x^2
+            num_cbfs = self.num_cbfs
+            n_u = action_batch.shape[1]
+            state = state_batch[:, :, 0]
+            num_constraints = self.num_cbfs + 2 * n_u
+            
+            # Constraints init
+            G = torch.zeros((batch_size, num_constraints, n_u + 1)).to(self.device)  # the extra variable is for epsilon (to make sure qp is always feasible)
+            h = torch.zeros((batch_size, num_constraints)).to(self.device)
+            ineq_constraint_counter = 0
+            
+            # Ser up the CBFs
+            b_cbf = 0.5 * (state[:,0] - state[:,1])**2 - env.def_max**2
+            if b_cbf < 0:
+                h_value = 1
+                
+            f_x = env.get_f(state)
+            g_x = env.get_g(state)
+            p_x = sigma_pred_batch[:, 3:5 ,0]
+            
+            dbdx = np.zeros((batch_size, state.shape[-1]))
+            dbdx[:, 0] = state[:, 0] - state[:, 1]
+            dbdx[:, 1] = state[:, 1] - state[:, 0]
+            
+            Lfb = torch.bmm(dbdx.view(batch_size, 1, -1), f_x.view(batch_size, -1, 1)).squeeze()
+            
+            dLfb = np.zeros((batch_size, state.shape[-1]))
+            dLfb[:, 0] = state[:, 3] - state[:, 4]
+            dLfb[:, 1] = state[:, 4] - state[:, 3]
+            dLfb[:, 3] = state[:, 0] - state[:, 1]
+            dLfb[:, 4] = state[:, 1] - state[:, 0]
+            
+            L2fb = torch.bmm(dLfb.view(batch_size, 1, -1), f_x.view(batch_size, -1, 1)).squeeze()
+            LfLgb = torch.bmm(dLfb.view(batch_size, 1, -1), g_x.view(batch_size, -1, 1)).squeeze()
+            LfLpb = torch.bmm(dLfb.view(batch_size, 1, -1), p_x.view(batch_size, -1, 1)).squeeze()
+            
+            Lfa1b = 2* b_cbf * dbdx
+            a2phi1 = b_cbf**4 + Lfb**2 + 2 * b_cbf * L2fb
+            
+            
+            
+            
+                
+            
+            
         else:
             raise Exception('Dynamics mode unknown!')
 

@@ -225,12 +225,12 @@ class RCBF_SAC(object):
         if critic_path is not None:
             self.critic.load_state_dict(torch.load(critic_path))
 
-    def get_safe_action(self, obs_batch, action_batch, dynamics_model, sigma_hat):
+    def get_safe_action(self, state_batch, action_batch, dynamics_model, sigma_hat):
         """Given a nominal action, returns a minimally-altered safe action to take.
 
         Parameters
         ----------
-        obs_batch : torch.tensor
+        state_batch : torch.tensor
         action_batch : torch.tensor
         dynamics_model : DynamicsModel
 
@@ -239,15 +239,10 @@ class RCBF_SAC(object):
         safe_action_batch : torch.tensor
             Safe actions to be taken (cbf_action + action).
         """
-        if self.env.dynamics_mode == 'Unicycle':
-            state_batch = obs_batch
-        else:
-            state_batch = dynamics_model.get_state(obs_batch)
         mean_pred_batch = None
         sigma_pred_batch = None
 
         if self.use_L1:
-            # Looks like it directly provide the disturbance
             mean_pred_batch = sigma_hat
             sigma_pred_batch = np.zeros(sigma_hat.shape)
             mean_pred_batch = to_tensor(mean_pred_batch, torch.FloatTensor, self.device)

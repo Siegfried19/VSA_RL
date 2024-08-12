@@ -3,6 +3,7 @@ import gym
 from gym import spaces
 from scipy.linalg import expm
 import torch
+import utils
 
 class VSAEnv(gym.Env):
     """Custom Environment that follows SafetyGym interface"""
@@ -30,6 +31,8 @@ class VSAEnv(gym.Env):
         self.n   = 0.006
         self.ks  = 10000
         self.la  = 0.015
+        
+        self.def_max = np.pi/3
         
         # Disturbance parameters
         self.delta_Js    = 0.01 * self.Js
@@ -107,7 +110,7 @@ class VSAEnv(gym.Env):
         x6 = self.state[5]    
         
         phi = x1 - x2
-        tau_e , tau_r, k = self.get_intermediate()
+        tau_e , tau_r, k = self.get_intermediate(self.state)
         
         self.delta_M = 0.01*self.M + 0.01*self.M*abs(phi) + 0.05*self.M*x3
         self.delta_Jp = 0.1*self.Jp + 0.03*self.Jp*x3
@@ -133,10 +136,10 @@ class VSAEnv(gym.Env):
             reward = self.get_reward()
         
         # Check if the episode is done
-        if (self.state[0] - self.state[1]) > np.pi/3 or (self.state[0] - self.state[1]) < -np.pi/3:
+        if (self.state[0] - self.state[1]) > self.def_max or (self.state[0] - self.state[1]) < -self.def_max:
             info['max_deflection_hitted'] = True
             print('Max deflection hitted')
-            penalty = -100 * (self.state[0] - self.state[1])^2
+            penalty = -100 * (self.state[0] - self.state[1])**2
             reward += penalty
             done = True
         else:
@@ -176,31 +179,42 @@ class VSAEnv(gym.Env):
             torch.cuda.manual_seed(s)
 
     def get_dynamics(self):
-        tau_e, tau_r, k = self.get_intermediate()
         def get_f(state):
+            state, expand_dim = utils.expand_dim(state)
+            tau_e, tau_r, k = self.get_intermediate(state)
             f_x = np.zeros(state.shape)
-            f_x[0] = state[3]
-            f_x[1] = state[4]
-            f_x[2] = state[5]
-            f_x[3] = 1/self.M * (-self.Dq*state[3] - self.m*self.g*self.d*np.sin(state[0]) - tau_e)
-            f_x[4] = 1/self.Jp * (-self.Dp*state[4] + tau_e)
-            f_x[5] = 1/self.Js * (-self.Ds*state[5] - tau_r)
+            f_x[:,0] = state[:,3]
+            f_x[:,1] = state[:,4]
+            f_x[:,2] = state[:,5]
+            f_x[:,3] = 1/self.M * (-self.Dq*state[:,3] - self.m*self.g*self.d*np.sin(state[0]) - tau_e)
+            f_x[:,4] = 1/self.Jp * (-self.Dp*state[:,4] + tau_e)
+            f_x[:,5] = 1/self.Js * (-self.Ds*state[:,5] - tau_r)
+            f_x = utils.narrow_dim(f_x, expand_dim)
             return f_x
+        
         def get_g(state):
-            g_x = np.zeros((state.shape[0], 2))
-            g_x[4,0] = 1/self.Jp
-            g_x[5,1] = 1/self.Js
+            state, expand_dim = utils.expand_dim(state)
+            g_x = np.zeros((state.shape[1], 2))
+            g_x[:,4,0] = 1/self.Jp
+            g_x[:,5,1] = 1/self.Js
+            g_x = utils.narrow_dim(g_x, expand_dim)
             return g_x
     
-    def get_intermediate(self):
-        phi = self.state[0] - self.state[1]
-        tau_e = (2*self.ks * (self.n*self.state[2])^2 * self.la^2 * phi) / (self.la - self.n * self.state[2])^2
-        tau_r = 2*self.ks * self.n^2 * self.state[2] * self.la^3 * phi^2 / (self.la - self.n * self.state[2])^3
-        k = 2*self.ks * (self.n * self.state[2])^2 * self.la^2 / (self.la - self.n * self.state[2])^2
+    def get_intermediate(self, state):
+        state, expand_dim = utils.expand_dim(state)
+        
+        phi = state[0] - state[1]
+        tau_e = (2*self.ks * (self.n*self.state[2])**2 * self.la**2 * phi) / (self.la - self.n * self.state[2])**2
+        tau_r = 2*self.ks * self.n**2 * self.state[2] * self.la**3 * phi**2 / (self.la - self.n * self.state[2])**3
+        k = 2*self.ks * (self.n * self.state[2])**2 * self.la**2 / (self.la - self.n * self.state[2])**2
+        
+        tau_e = utils.narrow_dim(tau_e, expand_dim)
+        tau_r = utils.narrow_dim(tau_r, expand_dim)
+        k = utils.narrow_dim(k, expand_dim)
         return tau_e, tau_r, k
     
     def get_state(obs):
-        return obs
+        return obs[:6]
     
 if __name__ == "__main__":
 
