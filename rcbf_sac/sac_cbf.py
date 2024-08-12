@@ -57,7 +57,7 @@ class RCBF_SAC(object):
         # else:
         #     self.compensator = None
 
-    def select_action(self, obs, dynamics_model, sigma_hat, evaluate=False, warmup=False):
+    def select_action(self, obs, dynamics_model, disturbance_hat, evaluate=False, warmup=False):
         if self.env.dynamics_mode == 'Quadrotor':
             state = obs[:6]
         if self.env.dynamics_mode == 'Unicycle':
@@ -88,7 +88,7 @@ class RCBF_SAC(object):
         # action = action.detach().cpu().numpy()[0] if expand_dim else action.detach().cpu().numpy()
         # return action
         #===============
-        safe_action, h_value = self.get_safe_action(state, action, dynamics_model, sigma_hat)
+        safe_action, h_value = self.get_safe_action(state, action, dynamics_model, disturbance_hat)
         if self.use_L1:
             return safe_action.detach().cpu().numpy()[0] if expand_dim else safe_action.detach().cpu().numpy(), h_value
         return safe_action.detach().cpu().numpy()[0] if expand_dim else safe_action.detach().cpu().numpy()
@@ -225,7 +225,7 @@ class RCBF_SAC(object):
         if critic_path is not None:
             self.critic.load_state_dict(torch.load(critic_path))
 
-    def get_safe_action(self, state_batch, action_batch, dynamics_model, sigma_hat):
+    def get_safe_action(self, state_batch, action_batch, dynamics_model, disturbance_hat):
         """Given a nominal action, returns a minimally-altered safe action to take.
 
         Parameters
@@ -243,8 +243,8 @@ class RCBF_SAC(object):
         sigma_pred_batch = None
 
         if self.use_L1:
-            mean_pred_batch = sigma_hat
-            sigma_pred_batch = np.zeros(sigma_hat.shape)
+            mean_pred_batch = disturbance_hat
+            sigma_pred_batch = np.zeros(disturbance_hat.shape)
             mean_pred_batch = to_tensor(mean_pred_batch, torch.FloatTensor, self.device)
             sigma_pred_batch = to_tensor(sigma_pred_batch, torch.FloatTensor, self.device)
             if len(mean_pred_batch.shape) == 1:

@@ -426,8 +426,10 @@ class CBFQPLayer:
                 # LDffh = torch.mul(torch.norm(dLfhdx.view(batch_size, -1), dim = 1), torch.full((batch_size,), self.env.L1_gamma)).squeeze()
                 LDffh = torch.bmm(dLfhdx.view(batch_size, 1, -1), mean_pred_batch.view(batch_size, -1, 1)).squeeze()
                 h[:, 0] = Lffh + (gamma_b + gamma_b) * dh_cbf + gamma_b * gamma_b * h_cbf + torch.bmm(Lgfh, action_batch).squeeze() + LDffh #- Hight order CBF under L1
+                # Notice, this is not the same with the paper, but it works better, might just becaue that extra bound is not needed
             else:
                 h[:, 0] = Lffh + (gamma_b + gamma_b) * dh_cbf + gamma_b * gamma_b * h_cbf + torch.bmm(Lgfh, action_batch).squeeze() - LDffh
+                
             
             G[:, :self.num_cbfs, 0] = -Lgfh.squeeze()[0]
             G[:, :self.num_cbfs, 1] = -Lgfh.squeeze()[1]
@@ -439,6 +441,7 @@ class CBFQPLayer:
         elif self.env.dynamics_mode == 'VSA':
             
             # In cbf functions, we assume alpha1(x) = x^2, alpha2(x) = x^2
+            L1_delta = torch.unsqueeze(np.stack(env.L1_delta, axis = 0), -1)
             num_cbfs = self.num_cbfs
             n_u = action_batch.shape[1]
             state = state_batch[:, :, 0]
@@ -450,39 +453,45 @@ class CBFQPLayer:
             ineq_constraint_counter = 0
             
             # Ser up the CBFs
-            b_cbf = 0.5 * (state[:,0] - state[:,1])**2 - env.def_max**2
-            if b_cbf < 0:
+            h_cbf = 0.5 * (state[:,0] - state[:,1])**2 - env.def_max**2
+            if h_cbf < 0:
                 h_value = 1
                 
             f_x = env.get_f(state)
             g_x = env.get_g(state)
-            p_x = sigma_pred_batch[:, 3:5 ,0]
+            p_x = mean_pred_batch
             
-            dbdx = np.zeros((batch_size, state.shape[-1]))
-            dbdx[:, 0] = state[:, 0] - state[:, 1]
-            dbdx[:, 1] = state[:, 1] - state[:, 0]
+            dhdx = np.zeros((batch_size, state.shape[-1]))
+            dhdx[:, 0] = state[:, 0] - state[:, 1]
+            dhdx[:, 1] = state[:, 1] - state[:, 0]
             
-            Lfb = torch.bmm(dbdx.view(batch_size, 1, -1), f_x.view(batch_size, -1, 1)).squeeze()
+            Lfh = torch.bmm(dhdx.view(batch_size, 1, -1), f_x.view(batch_size, -1, 1)).squeeze()
+              
+            dLfhdx = np.zeros((batch_size, state.shape[-1]))
+            dLfhdx[:, 0] = state[:, 3] - state[:, 4]
+            dLfhdx[:, 1] = state[:, 4] - state[:, 3]
+            dLfhdx[:, 3] = state[:, 0] - state[:, 1]
+            dLfhdx[:, 4] = state[:, 1] - state[:, 0]
             
-            dLfb = np.zeros((batch_size, state.shape[-1]))
-            dLfb[:, 0] = state[:, 3] - state[:, 4]
-            dLfb[:, 1] = state[:, 4] - state[:, 3]
-            dLfb[:, 3] = state[:, 0] - state[:, 1]
-            dLfb[:, 4] = state[:, 1] - state[:, 0]
+            L2fh = torch.bmm(dLfhdx.view(batch_size, 1, -1), f_x.view(batch_size, -1, 1)).squeeze()
+            LfLgh = torch.bmm(dLfhdx.view(batch_size, 1, -1), g_x.view(batch_size, -1, 2)).squeeze()
+            LfLph = torch.bmm(dLfhdx.view(batch_size, 1, -1), p_x.view(batch_size, -1, 1)).squeeze()
             
-            L2fb = torch.bmm(dLfb.view(batch_size, 1, -1), f_x.view(batch_size, -1, 1)).squeeze()
-            LfLgb = torch.bmm(dLfb.view(batch_size, 1, -1), g_x.view(batch_size, -1, 1)).squeeze()
-            LfLpb = torch.bmm(dLfb.view(batch_size, 1, -1), p_x.view(batch_size, -1, 1)).squeeze()
+            alpha2_phi1 = Lfh**2 + 2*L2fh*h_cbf**2 + h_cbf**4
+            Lfalpha_1_h = 2*h_cbf*Lfh
+
+            if self.use_L1:
+                Lfbd_bound = torch.bmm(torch.abs(dhdx.view(batch_size, 1, -1)), L1_delta.view(batch_size, -1, 1)).squeeze()
             
-            Lfa1b = 2* b_cbf * dbdx
-            a2phi1 = b_cbf**4 + Lfb**2 + 2 * b_cbf * L2fb
+            h[:, :self.num_cbfs] = alpha2_phi1 + Lfalpha_1_h  + L2fh + LfLph
+            G[:, :self.num_cbfs, 0] = -LfLgh[0]
+            G[:, :self.num_cbfs, 1] = -LfLgh[1]
+            G[:, :self.num_cbfs, n_u] = -2  # for slack
             
-            
-            
-            
-                
-            
-            
+            ineq_constraint_counter += self.num_cbfs
+            P = torch.diag(torch.tensor([0.05, 0.001, 1e1])).repeat(batch_size, 1, 1).to(self.device)
+            q = torch.zeros((batch_size, n_u + 1)).to(self.device)
+    
         else:
             raise Exception('Dynamics mode unknown!')
 

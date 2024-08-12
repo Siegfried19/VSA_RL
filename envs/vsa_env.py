@@ -48,11 +48,9 @@ class VSAEnv(gym.Env):
         self.dt = 0.01
         self.max_episode_steps = 5000
         
-        # Disturbance estimator parameters
-        self.Ae = 1.0
-        self.L1_theta_q = 0.09
-        self.L1_theta_p = 0.09
-        self.L1_theta_s = 0.12
+        # Disturbance estimator parameters, fro dynamics of q, theta_p, theta_s
+        self.Ae = [0,0,0,1,1,1]
+        self.L1_delta = [0,0,0,0.09, 0.09, 0.12]
         
         # variables for plotting
         self.dwq_record = []

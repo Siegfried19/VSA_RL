@@ -21,9 +21,9 @@ def train(agent, env, dynamics_model, args):
     avg_return = []
     
     # Disturbance records and initializations
-    sigma_hat_list = None
+    disturbance_hat_list = None
     disturbance_list = None
-    sigma_hat = env.state
+    disturbance_hat = None
     
     # Memory
     memory = ReplayMemory(args.replay_size, args.seed)
@@ -39,11 +39,11 @@ def train(agent, env, dynamics_model, args):
         episode_cost = 0
         episode_steps = 0
         done = False
-        states, obs = env.reset()
+        state, obs = env.reset()
         
         # Disturbance records in the current episode
-        sigma_hat = None
-        sigma_hat_list = []
+        disturbance_hat = None
+        disturbance_hat_list = []
         disturbance_list = []
         gp_list = []
         estimator = None
@@ -52,9 +52,9 @@ def train(agent, env, dynamics_model, args):
         if args.use_L1:
             # State of the dynamics
             # TODO: Change the state back to envirnment
-            init_state = dynamics_model.get_state(obs)
+            init_state = state
             estimator = DisturbanceEstimator(init_state, env)
-            sigma_hat = np.zeros(init_state.shape)
+            disturbance_hat = np.zeros(init_state.shape)
         
         import time
         start = time.time()
@@ -98,20 +98,20 @@ def train(agent, env, dynamics_model, args):
                     updates += 1
 
             if args.use_L1:
-                action, h_value = agent.select_action(obs, dynamics_model, sigma_hat, warmup=args.start_steps > total_numsteps)
+                action, h_value = agent.select_action(obs, dynamics_model, disturbance_hat, warmup=args.start_steps > total_numsteps)
             else:
-                action = agent.select_action(obs, dynamics_model, sigma_hat,warmup=args.start_steps > total_numsteps)  # Sample action from policy
+                action = agent.select_action(obs, dynamics_model, disturbance_hat, warmup=args.start_steps > total_numsteps)  # Sample action from policy
             # Recoding disturbance estimation
             # if args.use_L1 and i_episode > args.max_episodes - 2:
             # 这里区分了用GP还有用L1的，到时候可以把两个都试试
             if args.use_L1:
-                sigma_hat = estimator.disturbance_estimator(state, action)
+                disturbance_hat = estimator.disturbance_estimator(state, action)
                 if args.env_name == 'Unicycle':
                     state_GP = dynamics_model.get_state(obs)
                 else:
                     state_GP = dynamics_model.get_state(state)
                 mean, std = dynamics_model.predict_disturbance(state_GP)
-                sigma_hat_list.append(sigma_hat)
+                disturbance_hat_list.append(disturbance_hat)
                 gp_list.append(mean)
             
             hh += h_value
@@ -119,23 +119,28 @@ def train(agent, env, dynamics_model, args):
             disturbance_list.append(env.uncertainty)
             
             # Step
+            # What we can get from the dynamics is the state
             next_states, reward, done, info = env.step(action)  
             next_obs = np.zeros((12,))
 
             if 'cost_exception' in info:
                 prYellow('Cost exception occured.')
+                
             episode_steps += 1
             total_numsteps += 1
             episode_reward += reward
             episode_cost += info.get('cost', 0)
 
-            # 我们能得到的是state，因为step迭代用的直接是假设真实的dynamics
-            if env.dynamics_mode != 'Quadrotor':
-                next_obs = next_states
+            # We need the observation, because we will need this to pick action
+            if env.dynamics_mode == 'Quadrotor':
+                next_obs = env.get_obs(next_states, episode_steps)
+            elif env.dynamics_mode == 'VSA':
+                next_obs = env.get_obs(next_states, episode_steps)       
             elif episode_steps >= env.max_episode_steps:
                 next_obs = env.get_obs(next_states, episode_steps-1)
             else:
-                next_obs = env.get_obs(next_states, episode_steps)
+                next_obs = next_states
+            next_obs = next_states
 
             # Ignore the "done" signal if it comes from hitting the time horizon.
             # (https://github.com/openai/spinningup/blob/master/spinup/algos/sac/sac.py)
@@ -146,7 +151,8 @@ def train(agent, env, dynamics_model, args):
             # ================ Train GP ================
             # Update state and store transition for GP model learning
             # if args.use_L1 == False:
-            next_state = dynamics_model.get_state(next_states)
+            
+            # next_state = dynamics_model.get_state(next_states)
             if episode_steps % 2 == 0 and i_episode < args.gp_max_episodes:  # Stop learning the dynamics after a while to stabilize learning
                 # TODO: Clean up line below, specifically (t_batch)
                 dynamics_model.append_transition(state, action, next_state, t_batch=np.array([episode_steps*env.dt]))
@@ -180,20 +186,20 @@ def train(agent, env, dynamics_model, args):
                 states, obs = env.reset()
                 episode_reward = 0
                 done = False
-                sigma_hat = None
+                disturbance_hat = None
                 estimator = None
                 
                 if args.use_L1:
                     init_state = dynamics_model.get_state(obs)
                     estimator = DisturbanceEstimator(init_state, env)
-                    sigma_hat = np.zeros(init_state.shape)
+                    disturbance_hat = np.zeros(init_state.shape)
                     
                 while not done:  
                     env.render_save()
                     state = dynamics_model.get_state(obs)
-                    action, h_value = agent.select_action(obs, dynamics_model, sigma_hat, evaluate=True)
-                    sigma_hat = estimator.disturbance_estimator(state, action)
-                    # print(np.linalg.norm(sigma_hat - env.uncertainty))
+                    action, h_value = agent.select_action(obs, dynamics_model, disturbance_hat, evaluate=True)
+                    disturbance_hat = estimator.disturbance_estimator(state, action)
+                    # print(np.linalg.norm(disturbance_hat - env.uncertainty))
                     # print(action)
                     next_state, reward, done, _ = env.step(action)
                     episode_reward += reward
@@ -204,7 +210,7 @@ def train(agent, env, dynamics_model, args):
                 print("Test Episodes: {}, Avg. Reward: {}".format(1, round(episode_reward, 2)))
                 print("----------------------------------------")
         
-    return epi_return, avg_return, sigma_hat_list, gp_list, disturbance_list
+    return epi_return, avg_return, disturbance_hat_list, gp_list, disturbance_list
 
 def test(agent, env, dynamics_model, evaluate, model_path, visualize=True, debug=False):
 
@@ -213,7 +219,7 @@ def test(agent, env, dynamics_model, evaluate, model_path, visualize=True, debug
 
     def policy(observation):
         if args.use_comp:
-            action, action_comp, action_cbf = agent.select_action(observation, dynamics_model, sigma_hat=None, evaluate=True)
+            action, action_comp, action_cbf = agent.select_action(observation, dynamics_model, disturbance_hat=None, evaluate=True)
         else:
             action = agent.select_action(observation, dynamics_model,evaluate=True)
         return action
@@ -327,7 +333,7 @@ if __name__ == "__main__":
         import time
         start_time = time.time()
         # agent.policy.load_state_dict(torch.load('test/actor1.pkl', map_location=torch.device("cuda")))
-        epi_return, avg_return, sigma_hat, gp_est, disturbance = train(agent, env, dynamics_model, args)
+        epi_return, avg_return, disturbance_hat, gp_est, disturbance = train(agent, env, dynamics_model, args)
         print('Training time: {}'.format(time.time() - start_time))
 
     elif args.mode == 'test':

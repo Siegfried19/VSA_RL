@@ -9,9 +9,9 @@ class DisturbanceEstimator():
         self.t_batch = 0.0
         self.env = env
         # self.dynamics = dynamics_model
-        self.state_hat = init_state                         # state estimate
-        self.state_tilde = np.zeros(self.state_hat.shape)   # estimate error
-        self.sigma_hat = np.zeros(self.state_hat.shape)     # disturbance estimate
+        self.state_hat = init_state                             # state estimate
+        self.state_tilde = np.zeros(self.state_hat.shape)       # estimate error
+        self.disturbance_hat = np.zeros(self.state_hat.shape)     # disturbance estimate
 
         # use dynamics function directly to make DOB component more portable
         self.get_f, self.get_g = env.get_dynamics()
@@ -30,25 +30,25 @@ class DisturbanceEstimator():
         self.adapt_gain_no_Bm = -self.Ae/self.Phi
 
     def state_predictor(self, state, action):
-        self.state_hat = self.dt * (self.get_f(state) + self.sigma_hat + self.Ae*self.state_tilde + self.get_g(state) @ action) + self.state_hat
+        self.state_hat = self.dt * (self.get_f(state) + self.disturbance_hat + self.Ae*self.state_tilde + self.get_g(state) @ action) + self.state_hat
         return self.state_hat
 
     def adaptive_law(self, state):
         self.state_tilde = self.state_hat - state
-        self.sigma_hat = self.adapt_gain_no_Bm * self.state_tilde
-        return self.sigma_hat
+        self.disturbance_hat = self.adapt_gain_no_Bm * self.state_tilde
+        return self.disturbance_hat
     
     def disturbance_estimator(self, state, action):
-        sigma_hat = None
+        disturbance_hat = None
         state_hat = None
         if self.interval is None:
-            sigma_hat = self.adaptive_law(state)
+            disturbance_hat = self.adaptive_law(state)
             state_hat = self.state_predictor(state, action)
         else:
-            sigma_hat = self.adaptive_law(state)
+            disturbance_hat = self.adaptive_law(state)
             for i in range(self.interval):
                 state_hat = self.state_predictor(state, action)
-        return sigma_hat
+        return disturbance_hat
     
 
 
