@@ -3,9 +3,6 @@ import matplotlib.pyplot as plt
 from scipy.io import savemat
 from rcbf_sac.utils import *
 
-
-
-
 class Evaluator(object):
 
     def __init__(self, num_episodes, interval, save_path=''):

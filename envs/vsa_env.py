@@ -5,6 +5,8 @@ from scipy.linalg import expm
 import torch
 # from utils import *
 import matplotlib.pyplot as plt
+from datetime import datetime
+import os
 
 def expand_dim(state):
     expand_dim = len(state.shape) == 1
@@ -28,7 +30,7 @@ class VSAEnv(gym.Env):
     
     metadata = {'render.modes':['human']}
     
-    def __init__(self, random_init = True):
+    def __init__(self):
         super(VSAEnv, self).__init__()
         
         self.dynamics_mode = 'VSA'
@@ -94,8 +96,7 @@ class VSAEnv(gym.Env):
         
         # Render trjectory
         self.render_flag = False
-        self.random_init = random_init
-        self.reset(random_init)
+        # self.reset()
             
     # Generate desired trajectory
     def generate_trajectory(self, q_start, k_start, rate_q, rate_k, q_range = 3*np.pi, k_range = [5,55]):
@@ -161,7 +162,7 @@ class VSAEnv(gym.Env):
         # Check if the episode is done
         if (self.state[0] - self.state[1]) > self.def_max or (self.state[0] - self.state[1]) < -self.def_max:
             info['max_deflection_hitted'] = True
-            penalty = -100 * (self.state[0] - self.state[1])**2
+            penalty = -20 * (self.state[0] - self.state[1])**2
             reward += penalty
             done = True
         else:
@@ -170,10 +171,10 @@ class VSAEnv(gym.Env):
             info['reach_max_steps'] = True
         
         return self.state, reward, done, info
-        
+    
     def get_reward(self):
-        index = min(self.episode_step, self.max_episode_steps-1)
-        q_error = 0.5 * np.abs(self.q_ref_traj[index] - self.state[0])
+        index = min(self.episode_step, self.max_episode_steps)
+        q_error = 0.3 * np.abs(self.q_ref_traj[index] - self.state[0])
         k_error = 0.1 * np.abs(self.k_ref_traj[index] - self.state[2])
         dist = q_error + k_error
         reward = -dist
@@ -274,7 +275,8 @@ class VSAEnv(gym.Env):
         self.k_real_traj_plot = []
         self.q_ref_traj_plot = []
         self.k_ref_traj_plot = []
-        self.save_folder = "animations"
+        self.save_folder = "plots"
+        os.makedirs(self.save_folder, exist_ok=True)
     
     def render_save(self):
         _, _, k = self.get_intermediate(self.state)
@@ -299,13 +301,16 @@ class VSAEnv(gym.Env):
         plt.title('k trajectory')
         plt.legend()
         
-        plt.show()
+        now = datetime.now()
+        timestamp = now.strftime("%Y%m%d%H%M%S")
+        filename = f"{self.save_folder}/VSA_{timestamp}.png"
+        plt.savefig(filename)
         
 
 if __name__ == "__main__":
 
-    env = VSAEnv(random_init = False)   
-    env.reset()
+    env = VSAEnv()   
+    env.reset(random_init = True)
     q_ref_traj, k_ref_traj = env.q_ref_traj, env.k_ref_traj
     print(env.state[0])
     _,_,k = env.get_intermediate(env.state)
