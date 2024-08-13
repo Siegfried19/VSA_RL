@@ -59,8 +59,8 @@ def train(agent, env, dynamics_model, args):
         import time
         start = time.time()
         while not done:
-            if episode_steps % 500 == 0:
-                prYellow('Episode {} - step {} - eps_rew {} - eps_cost {}'.format(i_episode, episode_steps, episode_reward, episode_cost))
+            # if episode_steps % 500 == 0:
+            #     prYellow('Episode {} - step {} - eps_rew {} - eps_cost {}'.format(i_episode, episode_steps, episode_reward, episode_cost))
             
             # states and next_states are for real dynamics states
             # TODO: Change the state back to envirnment
@@ -122,8 +122,11 @@ def train(agent, env, dynamics_model, args):
             next_state, reward, done, info = env.step(action)  
             next_obs = np.zeros((12,))
 
-            if 'cost_exception' in info:
+
+            if 'cost_exception' in info:    # For unicycle
                 prYellow('Cost exception occured.')
+            if 'max_deflection_hitted' in info:   # For VSA
+                prYellow('Max deflection hitted.')
                 
             episode_steps += 1
             total_numsteps += 1
@@ -167,13 +170,13 @@ def train(agent, env, dynamics_model, args):
         
         h_count += 1 if hh > 0 else 0
         with open(args.output + '/log.txt', 'a') as f:
-            f.write('Episode: {}, Total numsteps: {}, Episode steps: {}, Reward: {}, Cost: {}, Running Time: {}, Violation: {}\n'.format(i_episode, total_numsteps, episode_steps, round(episode_reward, 2), round(episode_cost, 2), round(end-start, 4), h_count))
+            f.write('Episode: {}, Total numsteps: {}, Episode steps: {}, Reward: {}, Cost: {}, Running Time: {}, Violation: {}\n'.format(
+                i_episode, total_numsteps, episode_steps, round(episode_reward, 2), round(episode_cost, 2), round(end-start, 4), h_count))
             f.write('\n')
             f.close()
 
-        prGreen("Episode: {}, total numsteps: {}, episode steps: {}, reward: {}, cost: {}, running time: {}, Violation: {}".format(i_episode, total_numsteps,
-                                                                                      episode_steps,
-                                                                                             round(episode_reward, 2), round(episode_cost, 2), round(end-start, 4), h_count))
+        prGreen("Episode: {}, total numsteps: {}, episode steps: {}, reward: {}, cost: {}, running time: {}, Violation: {}".format(
+            i_episode, total_numsteps, episode_steps, round(episode_reward, 2), round(episode_cost, 2), round(end-start, 4), h_count))
         epi_return.append(episode_reward)
         
     # [optional] evaluate with plot
@@ -283,7 +286,7 @@ if __name__ == "__main__":
     parser.add_argument('--gp_model_size', default=3000, type=int, help='gp')
     parser.add_argument('--gp_max_episodes', default=100, type=int, help='gp max train episodes.')
     parser.add_argument('--k_d', default=3.0, type=float)
-    parser.add_argument('--gamma_b', default=20, type=float)
+    parser.add_argument('--gamma_b', default=5, type=float)
     parser.add_argument('--l_p', default=0.03, type=float,
                         help="Look-ahead distance for unicycle dynamics output.")
     # Model Based Learning

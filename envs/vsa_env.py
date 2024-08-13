@@ -141,7 +141,6 @@ class VSAEnv(gym.Env):
         # Check if the episode is done
         if (self.state[0] - self.state[1]) > self.def_max or (self.state[0] - self.state[1]) < -self.def_max:
             info['max_deflection_hitted'] = True
-            print('Max deflection hitted')
             penalty = -100 * (self.state[0] - self.state[1])**2
             reward += penalty
             done = True
@@ -250,7 +249,7 @@ class VSAEnv(gym.Env):
         self.k_ref_traj_plot.append(self.k_ref_traj[self.episode_step])
         
     def render_activate(self):
-        time = np.arange(0, self.max_episode_steps*self.dt + self.dt, self.dt)
+        time = np.arange(0, self.episode_step*self.dt, self.dt)
         plt.figure(figsize = (12, 6))
         
         plt.subplot(2,1,1)

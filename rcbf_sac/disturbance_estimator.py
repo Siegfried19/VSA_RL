@@ -27,7 +27,7 @@ class DisturbanceEstimator():
         self.Mat_expm = np.exp(self.Ae*self.dt)
         self.Phi = (self.Mat_expm - 1.0)
         # Modified, not sure if this is correct TODO: check this
-        self.adapt_gain_no_Bm = -self.Ae/self.Phi
+        self.adapt_gain_no_Bm = -np.divide(self.Ae, self.Phi, out=np.zeros_like(self.Phi), where=(self.Phi)!=0)
 
     def state_predictor(self, state, action):
         self.state_hat = self.dt * (self.get_f(state) + self.disturbance_hat + self.Ae*self.state_tilde + self.get_g(state) @ action) + self.state_hat
