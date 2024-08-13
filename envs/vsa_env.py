@@ -204,7 +204,7 @@ class VSAEnv(gym.Env):
             self.state[0] = np.pi/4
             self.state[1] = np.pi/8
             self.state[2] = np.pi*0.6
-            rate_q = 0.5*np.pi
+            rate_q = 0.3*np.pi
             rate_k = rate_q
         _, _, k = self.get_intermediate(self.state)
         self.q_ref_traj, self.k_ref_traj = self.generate_trajectory(self.state[0], k, rate_q, rate_k)
@@ -286,7 +286,7 @@ class VSAEnv(gym.Env):
         self.k_ref_traj_plot.append(self.k_ref_traj[self.episode_step])
         
     def render_activate(self):
-        time = np.arange(0, len(self.q_real_traj_plot)*self.dt, self.dt)
+        time = np.linspace(0, len(self.q_real_traj_plot)*self.dt, len(self.q_real_traj_plot))
         plt.figure(figsize = (12, 6))
         
         plt.subplot(2,1,1)
