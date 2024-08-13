@@ -286,7 +286,7 @@ class VSAEnv(gym.Env):
         self.k_ref_traj_plot.append(self.k_ref_traj[self.episode_step])
         
     def render_activate(self):
-        time = np.arange(0, self.episode_step*self.dt, self.dt)
+        time = np.arange(0, len(self.q_real_traj_plot)*self.dt, self.dt)
         plt.figure(figsize = (12, 6))
         
         plt.subplot(2,1,1)
@@ -305,6 +305,7 @@ class VSAEnv(gym.Env):
         timestamp = now.strftime("%Y%m%d%H%M%S")
         filename = f"{self.save_folder}/VSA_{timestamp}.png"
         plt.savefig(filename)
+        plt.close()
         
 
 if __name__ == "__main__":
