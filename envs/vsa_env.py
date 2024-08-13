@@ -3,15 +3,32 @@ import gym
 from gym import spaces
 from scipy.linalg import expm
 import torch
-from utils import *
+# from utils import *
 import matplotlib.pyplot as plt
+
+def expand_dim(state):
+    expand_dim = len(state.shape) == 1
+    if expand_dim:
+        if isinstance(state, np.ndarray):
+            state = np.expand_dims(state, axis=0)
+        else:
+            state = state.unsqueeze(0)
+    return state,expand_dim
+
+def narrow_dim(state,expand_dim):
+    if expand_dim:
+        if isinstance(state, np.ndarray):
+            state = np.squeeze(state, axis=0)
+        else:
+            state = state.squeeze(0)
+    return state
 
 class VSAEnv(gym.Env):
     """Custom Environment that follows SafetyGym interface"""
     
     metadata = {'render.modes':['human']}
     
-    def __init__(self):
+    def __init__(self, random_init = True):
         super(VSAEnv, self).__init__()
         
         self.dynamics_mode = 'VSA'
@@ -72,21 +89,24 @@ class VSAEnv(gym.Env):
         self.uncertainty = np.zeros((3,))
         self.episode_step = 0
         
-        # Generate desired trajectory
-        self.q_ref_traj, self.k_ref_traj = self.generate_trajectory()
+        # # Generate desired trajectory
+        # self.q_ref_traj, self.k_ref_traj = self.generate_trajectory()
         
         # Render trjectory
         self.render_flag = False
-        
-        self.reset() 
+        self.random_init = random_init
+        self.reset(random_init)
             
     # Generate desired trajectory
-    def generate_trajectory(self, q_range = 5, k_range = [30,50], rate = 0.5*np.pi):
+    def generate_trajectory(self, q_start, k_start, rate_q, rate_k, q_range = 3*np.pi, k_range = [5,55]):
         q_ref = []
         k_ref = []
+        q_phase_shift = np.arccos(2*q_start/q_range)
+        k_phase_shift = np.arcsin(k_start/(k_range[1]-k_range[0]))
+        
         for t in np.arange(0, self.max_episode_steps*self.dt + self.dt, self.dt):
-            q_ref.append(q_range*np.cos(rate * t)/2)
-            k_ref.append((k_range[1]-k_range[0])/2 + (k_range[1]-k_range[0])*np.cos(rate * t)/2)
+            q_ref.append(q_range*np.cos(rate_q * t + q_phase_shift)/2)
+            k_ref.append((k_range[1]-k_range[0])/2 + (k_range[1]-k_range[0])*np.cos(rate_k * t + k_phase_shift)/2)
         return q_ref, k_ref
     
     def generate_tau_ext(self):
@@ -153,8 +173,8 @@ class VSAEnv(gym.Env):
         
     def get_reward(self):
         index = min(self.episode_step, self.max_episode_steps-1)
-        q_error = 10 * np.abs(self.q_ref_traj[index] - self.state[0])
-        k_error = 0.5 * np.abs(self.k_ref_traj[index] - self.state[2])
+        q_error = 0.5 * np.abs(self.q_ref_traj[index] - self.state[0])
+        k_error = 0.1 * np.abs(self.k_ref_traj[index] - self.state[2])
         dist = q_error + k_error
         reward = -dist
         return reward
@@ -165,13 +185,28 @@ class VSAEnv(gym.Env):
         else:
             return False
     
-    def reset(self):
+    def reset(self, random_init = False):
             
         self.episode_step = 0
         self.state = np.zeros((6,))
         self.uncertainty = np.zeros((3,))
         self.obs = np.zeros((8,))
         self.tau_ext = self.generate_tau_ext()  
+        
+        if random_init:
+            self.state[0] = np.random.uniform(-np.pi/2, np.pi/2)
+            self.state[1] = self.state[0] + np.random.uniform(-np.pi/8, np.pi/8)
+            self.state[2] = np.random.uniform(np.pi*0.45, np.pi*0.6)
+            rate_q = np.random.uniform(0.1*np.pi, 0.5*np.pi)
+            rate_k = rate_q*np.random.uniform(0.3, 1)
+        else:
+            self.state[0] = np.pi/4
+            self.state[1] = np.pi/8
+            self.state[2] = np.pi*0.6
+            rate_q = 0.5*np.pi
+            rate_k = rate_q
+        _, _, k = self.get_intermediate(self.state)
+        self.q_ref_traj, self.k_ref_traj = self.generate_trajectory(self.state[0], k, rate_q, rate_k)
         
         if self.render_flag:
             self.render_start()
@@ -269,14 +304,18 @@ class VSAEnv(gym.Env):
 
 if __name__ == "__main__":
 
-    env = VSAEnv()
-    q_ref_traj, k_ref_traj = env.generate_trajectory()
+    env = VSAEnv(random_init = False)   
+    env.reset()
+    q_ref_traj, k_ref_traj = env.q_ref_traj, env.k_ref_traj
+    print(env.state[0])
+    _,_,k = env.get_intermediate(env.state)
+    print(k)
     
     time = np.arange(0, env.max_episode_steps*env.dt + env.dt, env.dt)
     plt.figure(figsize = (12, 6))
     plt.subplot(2,1,1)
-    plt.plot(time,q_ref_traj,label='q_ref')
-    plt.title('k_ref vs Time')
+    plt.plot(time, q_ref_traj,label='q_ref')
+    plt.title('q_ref vs Time')
     plt.legend()
     
     plt.subplot(2, 1, 2)

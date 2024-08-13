@@ -39,7 +39,7 @@ def train(agent, env, dynamics_model, args):
         episode_cost = 0
         episode_steps = 0
         done = False
-        state, obs = env.reset()
+        state, obs = env.reset(random_init=False)
         
         # Disturbance records in the current episode
         disturbance_hat = None
@@ -184,7 +184,7 @@ def train(agent, env, dynamics_model, args):
             # Evaluate with plot
             if hasattr(env, 'render_flag') and args.eval:
                 env.render_flag = True
-                state, obs = env.reset()
+                state, obs = env.reset(random_init=False)
                 episode_reward = 0
                 done = False
                 disturbance_hat = None

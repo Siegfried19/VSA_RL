@@ -79,11 +79,15 @@ class CBFQPLayer:
         safe_action_batch = self.solve_qp(Ps, qs, Gs, hs)
         # prCyan('Time to get constraints = {} - Time to solve QP = {} - time per qp = {} - batch_size = {} - device = {}'.format(build_qp_time - start_time, time() - build_qp_time, (time() - build_qp_time) / safe_action_batch.shape[0], Ps.shape[0], Ps.device))
         # The actual safe action is the cbf action + the nominal action
+        # if self.env.dynamics_mode == 'VSA':
+        #     final_action = torch.clamp(action_batch, self.u_min.repeat(action_batch.shape[0], 1), self.u_max.repeat(action_batch.shape[0], 1))
+        #     final_action[:,0] = torch.clamp(action_batch[:,0] + safe_action_batch[:,0], self.u_min.repeat(action_batch.shape[0], 1)[:,0], self.u_max.repeat(action_batch.shape[0], 1)[:,0])
+        # else:    
+        #     final_action = torch.clamp(action_batch + safe_action_batch, self.u_min.repeat(action_batch.shape[0], 1), self.u_max.repeat(action_batch.shape[0], 1))
         final_action = torch.clamp(action_batch + safe_action_batch, self.u_min.repeat(action_batch.shape[0], 1), self.u_max.repeat(action_batch.shape[0], 1))
-        
         return final_action if not expand_dims else final_action.squeeze(0), h_value
 
-    def solve_qp(self, Ps: torch.Tensor, qs: torch.Tensor, Gs: torch.Tensor, hs: torch.Tensor):
+    def solve_qp(self, Ps: torch.Tensor, Qs: torch.Tensor, Gs: torch.Tensor, Hs: torch.Tensor):
         """Solves:
             minimize_{u,eps} 0.5 * u^T P u + q^T u
                 subject to G[u,eps]^T <= h
@@ -92,24 +96,24 @@ class CBFQPLayer:
         ----------
         Ps : torch.Tensor
             (batch_size, n_u+1, n_u+1)
-        qs : torch.Tensor
+        Qs : torch.Tensor
             (batch_size, n_u+1)
         Gs : torch.Tensor
             (batch_size, num_ineq_constraints, n_u+1)
-        hs : torch.Tensor
+        Hs : torch.Tensor
             (batch_size, num_ineq_constraints)
         Returns
         -------
         safe_action_batch : torch.tensor
             The solution of the qp without the last dimension (the slack).
         """
-        Ghs = torch.cat((Gs, hs.unsqueeze(2)), -1)
+        Ghs = torch.cat((Gs, Hs.unsqueeze(2)), -1)
         Ghs_norm = torch.max(torch.abs(Ghs), dim=2, keepdim=True)[0]
         Gs /= Ghs_norm
-        hs = hs / Ghs_norm.squeeze(-1)
-        sol = self.cbf_layer(Ps, qs, Gs, hs, solver_args={"check_Q_spd": False, "maxIter": 100000, "notImprovedLim": 10, "eps": 1e-4})
-        # sol = to_tensor(self.cbf_layer_quadprog(Ps, qs, Gs, hs), torch.FloatTensor, self.device)
-        # sol = sol.unsqueeze(0) if len(sol.shape) == 1 else sol
+        hs = Hs / Ghs_norm.squeeze(-1)
+        # sol = self.cbf_layer(Ps, qs, Gs, hs, solver_args={"check_Q_spd": False, "maxIter": 100000, "notImprovedLim": 10, "eps": 1e-4})
+        sol = to_tensor(self.cbf_layer_quadprog(Ps, Qs, Gs, hs), torch.FloatTensor, self.device)
+        sol = sol.unsqueeze(0) if len(sol.shape) == 1 else sol
         safe_action_batch = sol[:, :-1]
         return safe_action_batch
 
@@ -158,13 +162,16 @@ class CBFQPLayer:
         G_np = np.squeeze(G_np).astype(np.double)
         h_np = np.squeeze(h_np).astype(np.double)
         
-        h_np = np.expand_dims(h_np, axis=0)
-        G_np = np.expand_dims(G_np, axis=0)
+        if len(G_np.shape) == 1:
+            h_np = np.expand_dims(h_np, axis=0)
+            G_np = np.expand_dims(G_np, axis=0)
         G_qp = -G_np
         h_qp = -h_np
-        
-        solution = solve_qp(P_np, q_np, G_qp.T, h_qp)[0]   
-        
+        try:
+            solution = solve_qp(P_np, q_np, G_qp.T, h_qp)[0]   
+        except ValueError:
+            print("Infeasible QP, unsaft action execute")
+            solution = torch.zeros((Gs.shape[0], Gs.shape[2]))
         return solution
 
     def get_cbf_qp_constraints(self, state_batch, action_batch, mean_pred_batch, sigma_pred_batch, use_L1=False):
@@ -467,11 +474,11 @@ class CBFQPLayer:
             num_cbfs = self.num_cbfs
             n_u = action_batch.shape[1]
             state = state_batch[:, :, 0]
-            # num_constraints = self.num_cbfs + 2 * n_u
-            num_constraints = self.num_cbfs
+            num_constraints = self.num_cbfs + 2 * n_u
+            # num_constraints = self.num_cbfs
             
             # Constraints init
-            G = torch.zeros((batch_size, num_constraints, n_u + 1 - 1)).to(self.device)  # the extra variable is for epsilon (to make sure qp is always feasible)
+            G = torch.zeros((batch_size, num_constraints, n_u + 1)).to(self.device)  # the extra variable is for epsilon (to make sure qp is always feasible)
             h = torch.zeros((batch_size, num_constraints)).to(self.device)
             ineq_constraint_counter = 0
             
@@ -502,38 +509,38 @@ class CBFQPLayer:
             
             alpha2_phi1 = self.gamma_b * (Lfh**2 + self.gamma_b * 2*Lfh*h_cbf**2 + self.gamma_b * h_cbf**4)
             Lfalpha_1_h = self.gamma_b * 2*h_cbf*Lfh
-            LfLgh_u1 = torch.bmm(LfLgh.view(batch_size, 1, -1), action_batch.view(batch_size, -1, 1)).squeeze()
+            LfLgh_u = torch.bmm(LfLgh.view(batch_size, 1, -1), action_batch.view(batch_size, -1, 1)).squeeze()
 
             if self.use_L1:
                 Lfbd_bound = torch.bmm(torch.abs(dLfhdx.view(batch_size, 1, -1)), L1_delta.view(batch_size, -1, 1)).squeeze()
             
-            h[:, :self.num_cbfs] = alpha2_phi1 + Lfalpha_1_h  + L2fh + LfLph + LfLgh_u1
-            G[:, :self.num_cbfs, 0] = -LfLgh.squeeze()[0] # Because only u1 appeared in CBF
-            G[:, :self.num_cbfs, 1] = -20  # for slack
+            h[:, :self.num_cbfs] = alpha2_phi1 + Lfalpha_1_h  + L2fh + LfLph + LfLgh_u
+            G[:, :self.num_cbfs, :n_u] = -LfLgh.squeeze()
+            G[:, :self.num_cbfs, n_u] = -20  # for slack
             
             ineq_constraint_counter += self.num_cbfs
-            P = torch.diag(torch.tensor([0.05, 1e1])).repeat(batch_size, 1, 1).to(self.device)
-            q = torch.zeros((batch_size, 2)).to(self.device)
+            P = torch.diag(torch.tensor([0.05, 0.01, 1e1])).repeat(batch_size, 1, 1).to(self.device)
+            q = torch.zeros((batch_size, n_u + 1)).to(self.device)
     
         else:
             raise Exception('Dynamics mode unknown!')
 
-        # # Second let's add actuator constraints
-        # n_u = action_batch.shape[1]  # dimension of control inputs
+        # Second let's add actuator constraints
+        n_u = action_batch.shape[1]  # dimension of control inputs
 
-        # for c in range(n_u):
+        for c in range(n_u):
 
-        #     # u_max >= u_nom + u ---> u <= u_max - u_nom
-        #     if self.u_max is not None:
-        #         G[:, ineq_constraint_counter, c] = 1
-        #         h[:, ineq_constraint_counter] = self.u_max[c] - action_batch[:, c].squeeze(-1)
-        #         ineq_constraint_counter += 1
+            # u_max >= u_nom + u ---> u <= u_max - u_nom
+            if self.u_max is not None:
+                G[:, ineq_constraint_counter, c] = 1
+                h[:, ineq_constraint_counter] = self.u_max[c] - action_batch[:, c].squeeze(-1)
+                ineq_constraint_counter += 1
 
-        #     # u_min <= u_nom + u ---> -u <= u_min - u_nom
-        #     if self.u_min is not None:
-        #         G[:, ineq_constraint_counter, c] = -1
-        #         h[:, ineq_constraint_counter] = -self.u_min[c] + action_batch[:, c].squeeze(-1)
-        #         ineq_constraint_counter += 1
+            # u_min <= u_nom + u ---> -u <= u_min - u_nom
+            if self.u_min is not None:
+                G[:, ineq_constraint_counter, c] = -1
+                h[:, ineq_constraint_counter] = -self.u_min[c] + action_batch[:, c].squeeze(-1)
+                ineq_constraint_counter += 1
 
         return P, q, G, h, h_value
 
