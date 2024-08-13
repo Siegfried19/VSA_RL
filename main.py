@@ -105,10 +105,10 @@ def train(agent, env, dynamics_model, args):
             # if args.use_L1 and i_episode > args.max_episodes - 2:
             if args.use_L1:
                 disturbance_hat = estimator.disturbance_estimator(state, action)
-                if args.env_name == 'Unicycle':
-                    state_GP = dynamics_model.get_state(obs)
-                else:
-                    state_GP = dynamics_model.get_state(state)
+                # if args.env_name == 'Unicycle':
+                state_GP = dynamics_model.get_state(obs)
+                # else:
+                #     state_GP = dynamics_model.get_state(state)
                 mean, std = dynamics_model.predict_disturbance(state_GP)
                 disturbance_hat_list.append(disturbance_hat)
                 gp_list.append(mean)
@@ -177,37 +177,45 @@ def train(agent, env, dynamics_model, args):
         epi_return.append(episode_reward)
         
     # [optional] evaluate with plot
-        if i_episode % 5 == 0:
+        if (i_episode+1) % 5 == 0:
             # Evaluate with plot
-            if args.env_name == 'Unicycle':
+            if hasattr(env, 'render_flag') and args.eval:
                 env.render_flag = True
-                states, obs = env.reset()
+                state, obs = env.reset()
                 episode_reward = 0
                 done = False
                 disturbance_hat = None
                 estimator = None
+                episode_steps = 0
                 
                 if args.use_L1:
-                    init_state = dynamics_model.get_state(obs)
+                    init_state = state
                     estimator = DisturbanceEstimator(init_state, env)
                     disturbance_hat = np.zeros(init_state.shape)
-                    
+                
                 while not done:  
                     env.render_save()
-                    state = dynamics_model.get_state(obs)
+                    # state = dynamics_model.get_state(obs)
                     action, h_value = agent.select_action(obs, dynamics_model, disturbance_hat, evaluate=True)
                     disturbance_hat = estimator.disturbance_estimator(state, action)
                     # print(np.linalg.norm(disturbance_hat - env.uncertainty))
                     # print(action)
                     next_state, reward, done, _ = env.step(action)
                     episode_reward += reward
-                    obs = next_state
+                    if env.dynamics_mode == 'Quadrotor':
+                        next_obs = env.get_obs(next_state, episode_steps)
+                    elif env.dynamics_mode == 'VSA':
+                        next_obs = env.get_obs(next_state, episode_steps)       
+                    elif episode_steps >= env.max_episode_steps:
+                        next_obs = env.get_obs(next_state, episode_steps-1)
+                    else:
+                        next_obs = next_state
                 env.render_flag = False
                 env.render_activate()
                 print("----------------------------------------")
                 print("Test Episodes: {}, Avg. Reward: {}".format(1, round(episode_reward, 2)))
                 print("----------------------------------------")
-        
+                         
     return epi_return, avg_return, disturbance_hat_list, gp_list, disturbance_list
 
 def test(agent, env, dynamics_model, evaluate, model_path, visualize=True, debug=False):

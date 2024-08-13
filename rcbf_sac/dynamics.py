@@ -244,7 +244,7 @@ class DynamicsModel:
             state_batch[:, ::2] *= 100.0  # Scale Positions
             state_batch[:, 1::2] *= 30.0  # Scale Velocities
         elif self.env.dynamics_mode == 'Quadrotor':
-            state_batch = np.copy(obs)
+            state_batch = np.copy(obs[:, :6])
         elif self.env.dynamics_mode == 'VSA':
             state_batch = np.copy(obs[:, :6])
         else:

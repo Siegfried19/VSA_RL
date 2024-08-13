@@ -4,7 +4,7 @@ from gym import spaces
 from scipy.linalg import expm
 import torch
 from utils import *
-
+import matplotlib.pyplot as plt
 
 class VSAEnv(gym.Env):
     """Custom Environment that follows SafetyGym interface"""
@@ -75,8 +75,11 @@ class VSAEnv(gym.Env):
         # Generate desired trajectory
         self.q_ref_traj, self.k_ref_traj = self.generate_trajectory()
         
-        self.reset() 
+        # Render trjectory
+        self.render_flag = False
         
+        self.reset() 
+            
     # Generate desired trajectory
     def generate_trajectory(self, q_range = 5, k_range = [30,50], rate = 0.5*np.pi):
         q_ref = []
@@ -123,6 +126,7 @@ class VSAEnv(gym.Env):
         dwp = 1/self.Jp * (self.Dp*x5 - tau_e - action[0] - tau_gp) - ((self.Dp + self.delta_Dp)*x5 + tau_e + delta_tau_e + tau_gp - self.tau_fp + action[0])/(self.Jp + self.delta_Jp)
         dws = 1/self.Js * (self.Ds*x6 + tau_r - action[1]) - ((self.Ds + self.delta_Ds)*x6 - tau_r - delta_tau_r - self.tau_fs + action[1])/(self.Js + self.delta_Js)
         
+        self.uncertainty = np.array([dwq, dwp, dws])
         # Update the state
         self.state = (self.get_f(self.state) + self.get_g(self.state) @ action + np.array([0, 0, 0, dwq, dwp, dws])) * self.dt + self.state
         self.episode_step += 1
@@ -168,7 +172,10 @@ class VSAEnv(gym.Env):
         self.state = np.zeros((6,))
         self.uncertainty = np.zeros((3,))
         self.obs = np.zeros((8,))
-        self.tau_ext = self.generate_tau_ext()
+        self.tau_ext = self.generate_tau_ext()  
+        
+        if self.render_flag:
+            self.render_start()
         
         return self.state, self.obs
     
@@ -225,9 +232,44 @@ class VSAEnv(gym.Env):
         obs[7] = self.k_ref_traj[episode_step]
         return obs
     
+    def get_state(obs):
+        return np.copy(obs[:6])
+    
+    def render_start(self):
+        self.q_real_traj_plot = []
+        self.k_real_traj_plot = []
+        self.q_ref_traj_plot = []
+        self.k_ref_traj_plot = []
+        self.save_folder = "animations"
+    
+    def render_save(self):
+        _, _, k = self.get_intermediate(self.state)
+        self.q_real_traj_plot.append(self.state[0])
+        self.k_real_traj_plot.append(k)
+        self.q_ref_traj_plot.append(self.q_ref_traj[self.episode_step])
+        self.k_ref_traj_plot.append(self.k_ref_traj[self.episode_step])
+        
+    def render_activate(self):
+        time = np.arange(0, self.max_episode_steps*self.dt + self.dt, self.dt)
+        plt.figure(figsize = (12, 6))
+        
+        plt.subplot(2,1,1)
+        plt.plot(time, self.q_real_traj_plot, label='q_real', color='orange')
+        plt.plot(time, self.q_ref_traj_plot, label='q_ref', color='green')
+        plt.title('q trajectory')
+        plt.legend()
+        
+        plt.subplot(2, 1, 2)
+        plt.plot(time, self.k_real_traj_plot, label='k_real', color='orange')
+        plt.plot(time, self.k_ref_traj_plot, label='k_ref', color='green')
+        plt.title('k trajectory')
+        plt.legend()
+        
+        plt.show()
+        
+
 if __name__ == "__main__":
 
-    import matplotlib.pyplot as plt
     env = VSAEnv()
     q_ref_traj, k_ref_traj = env.generate_trajectory()
     
